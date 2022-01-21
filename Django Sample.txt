@@ -1,0 +1,245 @@
+class CreatePeopleView(LoggedInMixin, View):
+    @method_decorator(login_required)
+    @method_decorator(can_access('RETRIEVE_CREARPERFIL_DISPLAYCREARPERFILMENU'))
+    def dispatch(self, *args, **kwargs):
+        return super(CreatePeopleView, self).dispatch(*args, **kwargs)
+ 
+    def get(self, request, **kwargs):
+        print "in get", self.kwargs
+        error = None
+        if 'error' in self.kwargs:
+            error = self.kwargs['error']
+        tipoafiliacion = TipoAfiliacion.objects.all()
+        # insurance_company = AfiliacionNombre.objects.all()
+        insurance_company = AfiliacionNombre.objects.all()
+        house = House.objects.all()
+        family = Family.objects.all()
+        iddocumenttype = IdDocumentType.objects.all()
+        marital = MaritalStatus.objects.all()
+        obj, result = Token.objects.get_or_create(user=self.request.user)
+        education = EducationLevel.objects.all()
+        job = JobType.objects.all()
+        ethnic = EthnicGroup.objects.all()
+        religion = Religion.objects.all()
+        regi = regimen.objects.all()
+        person_type = Person_Type.objects.all()
+        country = Country.objects.all()
+ 
+        phone_type_list = []
+        for em in Phone_Type.objects.all():
+            p = {}
+            p.update({'id': em.id, 'phone_type': em.phone_type})
+            phone_type_list.append(p)
+ 
+        age_group = []
+        document = Codeset.objects.filter(Code="ETG")
+        for age in document:
+            m ={}
+            m.update({"id":age.id,"Name":age.Name})
+            age_group.append(m)
+ 
+        relation_type_list = []
+        for pr in PeopleRelationTypesCodes.objects.all():
+            r = {}
+            r.update({'id': pr.id, 'name': pr.relationType})
+            relation_type_list.append(r)
+ 
+ 
+        return render(request, 'people/create_people.html',
+                      {'tipoafiliacion': tipoafiliacion, 'company': insurance_company, \
+                       'house': house, 'famliy': family, 'token': obj.key, 'iddocumenttype': iddocumenttype, \
+                       'marital': marital, 'education': education, 'job': job, 'ethnic': ethnic, \
+                       'religion': religion, 'regimen': regi, 'person_type': person_type, 'country': country,
+                       'error': error,"phone_type_list":phone_type_list,"group_age":age_group,'relation_type_list':relation_type_list})
+ 
+    def post(self, request, **kwargs):
+        house_id = None
+        family_id = None
+        regimen = None
+        start_subscription = None
+        end_subscription = None
+        print "inside create people post", request.POST
+        data = request.POST
+        f_first_name = data.get('f_first_name').upper()
+        s_first_name = data.get('s_first_name').upper()
+        f_last_name = data.get('f_last_name').upper()
+        s_last_name = data.get('s_last_name').upper()
+        id_card = data.get('id_card')
+        card_number = data.get('card_number').upper()
+ 
+        has_carer_checkbox = 0
+        # if(data.get("has_carer_checkbox") == 'on'):
+        #     has_carer_checkbox = 1
+        if(data.get('carer_checkbox_val') != ''):
+            has_carer_checkbox = data.get('carer_checkbox_val')
+        # print "inpur: has_carer_checkbox",data.getlist("has_carer_checkbox"),">>",data
+        # print "has_carer_checkbox",has_carer_checkbox
+        # exit()
+ 
+        relation_type = data.get("relation_type")
+        select_person = data.get("select_person")
+ 
+        primary_phone_number = data.get('phone_number1').upper()
+        secondary_phone_number = data.get('phone_number2').upper()
+        primary_phone_number_type = data.get('phone_number_type1')
+        secondary_phone_number_type = data.get('phone_number_type2')
+ 
+ 
+ 
+        age_group_id = data.get('age_group')
+ 
+        gender = data.get('gender')
+        birthdate = data.get('birthdate')
+        marital_status_id = data.get('marital_status_id')
+        education_level_id = data.get('education_level')
+        job_type_id = data.get('job_type')
+        ethnic_group = data.get('ethnic_group')
+        religion_id = data.get('religion')
+        creation_date = datetime.datetime.now()
+        profile = request.FILES.get('file')
+        print ">>>>>>>>>>>", profile, gender, birthdate, data.get('family')
+        person_type = data.get('person_type')
+        birth_country = data.get('birth_country')
+        birth_province = data.get('birth_province')
+        birth_city = data.get('birth_city')
+        idCountry = data.get('idCountry')
+ 
+        if data.get('ActiveStatus') == "True":
+            active_status = 1
+        else:
+            active_status = 0
+ 
+        pattern = '(\d+\s\w+)'
+        family = str(data.get('family'))
+        print "family>>>>>>>", family
+        print "match resulkt>>>>>>>>", re.compile(pattern).search(family)
+        if 'house' in data:
+            if re.compile(pattern).search(data.get('house')):
+                house_id = data.get('house').split(' ')[0]
+                print ">>>>house id>>>>>>", house_id
+ 
+        if 'family' in data:
+            if re.compile(pattern).search(data.get('family')) != None:
+                family_id = data.get('family').split(' ')[0]
+                print ">>>>family id>>>>>>", family_id
+ 
+ 
+        # To check the duplicate id number and number type
+        if IDDocument.objects.filter(number=card_number, idDocumentType_id=id_card).exists():
+            return HttpResponseRedirect(
+                reverse('create_people_error', kwargs={'error': 'Documento identificativo duplicado'}))
+ 
+        else:
+ 
+            # hash_object = hashlib.sha1(f_first_name+s_first_name+str(birthdate))
+            # UUID = hash_object.hexdigest()
+            UUID = uuid.uuid1()
+            print UUID
+ 
+            person = Person()
+            k = None
+            if request.FILES.get("file"):
+ 
+                file = request.FILES["file"]
+                im = StringIO(file.read())
+                image = Image.open(im)
+ 
+                # normalize image mode
+                if image.mode != 'RGB':
+                    image = image.convert('RGB')
+ 
+                temp_handle = StringIO()
+                try:
+                    import ImageOps
+                except ImportError:
+                    from PIL import ImageOps
+ 
+                QUAL = 75
+                image.thumbnail((110, 110), Image.ANTIALIAS)
+                image.save(temp_handle, 'png', quality=QUAL)
+                # ImageOps.fit(image, (50, 50), Image.ANTIALIAS
+                #             ).save(temp_handle, 'png', quality=QUAL)
+                temp_handle.seek(0)
+ 
+                file = request.FILES["file"]
+                filename = file.name
+                content = temp_handle.read()
+                conn = S3Connection('XXXXXXXXXXX', 'XXXXXXXXXX')
+                b = conn.get_bucket("ZXXXXXXXXXXXXXXXXXXXXX")
+                mime = mimetypes.guess_type(filename)[0]
+                k = Key(b)
+                k.key = uuid.uuid1()
+                k.set_metadata("Content-Type", mime)
+                k.set_contents_from_string(content)
+                k.set_acl("public-read")
+                person.imageS3Key = k.key
+ 
+            person.UUID = UUID
+            person.First_FirstName = f_first_name
+            person.Second_FirstName = s_first_name
+            person.First_LastName = f_last_name
+            person.Second_LastName = s_last_name
+            person.age_group_id=int(age_group_id)
+ 
+            # person.primary_phone_number = primary_phone_number
+            # person.secondary_phone_number = secondary_phone_number
+ 
+            person.geneder = gender
+            person.birthDate = birthdate
+            person.creationDate = creation_date
+            person.creation_UserID = request.user
+            person.lastmodificationDate = datetime.datetime.now()
+            person.marital_status_id = marital_status_id
+            person.educationLevel_id = education_level_id
+            person.job_type_id = job_type_id
+            person.ethnic_group_id = ethnic_group
+            person.religion_id = religion_id
+            person.person_type_id = person_type
+            person.active_status = active_status
+            person.birth_country_id = birth_country
+            person.birth_province_id = birth_province
+            person.birth_city_id = birth_city
+            person.carer_person_id = select_person
+            person.has_carer = has_carer_checkbox
+            person.relation_type_id = relation_type
+            person.save()
+ 
+            if (isinstance(primary_phone_number_type,int) or isinstance(primary_phone_number_type,unicode)) and primary_phone_number!='':
+                Phone.objects.create(personID_id=person.UUID,number=primary_phone_number,phoneType_id=primary_phone_number_type)
+ 
+            if (isinstance(secondary_phone_number,int) or isinstance(secondary_phone_number,unicode))and secondary_phone_number!='':
+                Phone.objects.create(personID_id=person.UUID,number=secondary_phone_number,phoneType_id=secondary_phone_number_type)
+ 
+            # It document table
+            IDDocument.objects.create(personID=person, number=card_number, idDocumentType_id=id_card,idCountry_id=idCountry)
+ 
+            # InsuranceAffiliation tabel
+            # insurance affiliation part
+            insurance_company = data.get('insurance_company', None)
+            affiliation_type = data.get('affiliation_type', None)
+            regimen = data.get('regimen', None)
+            if not insurance_company:
+                insurance_company = None
+            if not affiliation_type:
+                affiliation_type = None
+            if data.get('start_subscription'):
+                start_subscription = data.get('start_subscription')
+            if data.get('end_subscription'):
+                end_subscription = data.get('end_subscription')
+            if not regimen:
+                regimen = None
+            if insurance_company or affiliation_type or regimen:
+                InsuranceAffiliation.objects.create(personID=person, companyID_id=insurance_company,
+                                                    affilliationType=affiliation_type, \
+                                                    startSubscription=start_subscription,
+                                                    endSubscription=end_subscription, regimen_id=regimen)
+ 
+            if house_id and House.objects.filter(UUID=house_id).exists():
+                HouseMembers.objects.create(personID=person, houseID_id=house_id)
+ 
+            if family_id and Family.objects.filter(UUID=family_id).exists():
+                FamilyMembers.objects.create(personID=person, familyID_id=family_id)
+ 
+            print "person id>>>>", person.UUID
+ 
+            return HttpResponseRedirect('/people/people_info/%s' % (person.UUID))

@@ -1,1 +1,1 @@
-# react-node-django-main
+# react-node-django
